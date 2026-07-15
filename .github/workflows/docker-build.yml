@@ -1,0 +1,38 @@
+name: Java Docker Build
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Verify Java Version
+        run: java -version
+
+      - name: Build Java Application
+        run: mvn clean package
+
+      - name: List Target Folder
+        run: ls -la target
+
+      - name: Build Docker Image
+        run: docker build -t java-demo:latest .
+
+      - name: List Docker Images
+        run: docker images

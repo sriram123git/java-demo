@@ -13,116 +13,316 @@ env:
   ECR_REPOSITORY: java-demo
 
 jobs:
-  build:
+
+  build-and-deploy:
 
     runs-on: ubuntu-latest
 
     steps:
 
-    # Checkout Source
-    - name: Checkout Source
-      uses: actions/checkout@v4
+      # ============================================================
+      # 1. Checkout Source Code
+      # ============================================================
+      - name: Checkout Source
+        uses: actions/checkout@v4
 
-    # Setup Java
-    - name: Setup Java 17
-      uses: actions/setup-java@v4
-      with:
-        distribution: temurin
-        java-version: '17'
-        cache: maven
 
-    # Build
-    - name: Build Application
-      run: mvn clean package
+      # ============================================================
+      # 2. Setup Java 17
+      # ============================================================
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
 
-    # Unit Test
-    - name: Run Unit Tests
-      run: mvn test
 
-    # Verify Sonar Secrets
-    - name: Verify Sonar Secrets
-      run: |
-        if [ -z "${{ secrets.SONAR_TOKEN }}" ]; then
-          echo "SONAR_TOKEN is EMPTY"
-          exit 1
-        fi
+      # ============================================================
+      # 3. Build Java Application
+      # ============================================================
+      - name: Build Application
+        run: |
+          mvn clean package
 
-        if [ -z "${{ secrets.SONAR_HOST_URL }}" ]; then
-          echo "SONAR_HOST_URL is EMPTY"
-          exit 1
-        fi
 
-        echo "SonarQube secrets verified."
+      # ============================================================
+      # 4. Run Unit Tests
+      # ============================================================
+      - name: Run Unit Tests
+        run: |
+          mvn test
 
-    # Test Sonar Connectivity
-    - name: Test SonarQube Connectivity
-      run: |
-        curl -I ${{ secrets.SONAR_HOST_URL }}
 
-    # SonarQube Scan
-    - name: SonarQube Scan
-      env:
-        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      run: |
-        mvn sonar:sonar \
-          -Dsonar.projectKey=java-demo \
-          -Dsonar.host.url=$SONAR_HOST_URL \
-          -Dsonar.token=$SONAR_TOKEN
+      # ============================================================
+      # 5. Verify SonarQube Secrets
+      # ============================================================
+      - name: Verify Sonar Secrets
+        run: |
+          if [ -z "${{ secrets.SONAR_TOKEN }}" ]; then
+            echo "SONAR_TOKEN is EMPTY"
+            exit 1
+          fi
 
-    # Build Docker Image
-    - name: Build Docker Image
-      run: |
-        docker build -t $IMAGE_NAME:${{ github.sha }} .
+          if [ -z "${{ secrets.SONAR_HOST_URL }}" ]; then
+            echo "SONAR_HOST_URL is EMPTY"
+            exit 1
+          fi
 
-    # Verify Docker Image
-    - name: Verify Docker Image
-      run: |
-        docker images
+          echo "SonarQube secrets verified."
 
-    # Trivy Scan
-    - name: Run Trivy Scan
-      uses: aquasecurity/trivy-action@master
-      with:
-        image-ref: java-demo:${{ github.sha }}
-        format: table
-        exit-code: '0'
-        ignore-unfixed: true
-        severity: CRITICAL,HIGH
 
-    # Configure AWS Credentials
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_REGION }}
+      # ============================================================
+      # 6. Test SonarQube Connectivity
+      # ============================================================
+      - name: Test SonarQube Connectivity
+        run: |
+          curl -I "${{ secrets.SONAR_HOST_URL }}"
 
-    # Login to Amazon ECR
-    - name: Login to Amazon ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v2
 
-    # Tag Docker Image
-    - name: Tag Docker Image
-      run: |
-        docker tag \
-        java-demo:${{ github.sha }} \
-        ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+      # ============================================================
+      # 7. SonarQube Scan
+      # ============================================================
+      - name: SonarQube Scan
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-    # Push Docker Image
-    - name: Push Docker Image
-      run: |
-        docker push \
-        ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+        run: |
+          mvn sonar:sonar \
+            -Dsonar.projectKey=java-demo \
+            -Dsonar.host.url=$SONAR_HOST_URL \
+            -Dsonar.token=$SONAR_TOKEN
 
-    # Success Message
-    - name: Pipeline Completed
-      run: |
-        echo "=================================="
-        echo "Java Build Completed"
-        echo "SonarQube Scan Completed"
-        echo "Docker Build Completed"
-        echo "Trivy Scan Completed"
-        echo "Docker Image Pushed to Amazon ECR"
-        echo "=================================="
+
+      # ============================================================
+      # 8. Build Docker Image
+      # ============================================================
+      - name: Build Docker Image
+        run: |
+          docker build \
+            -t $IMAGE_NAME:${{ github.sha }} .
+
+
+      # ============================================================
+      # 9. Verify Docker Image
+      # ============================================================
+      - name: Verify Docker Image
+        run: |
+          docker images
+
+
+      # ============================================================
+      # 10. Trivy Security Scan
+      # ============================================================
+      - name: Run Trivy Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: java-demo:${{ github.sha }}
+          format: table
+          exit-code: '0'
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+
+
+      # ============================================================
+      # 11. Configure AWS Credentials
+      # ============================================================
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+
+      # ============================================================
+      # 12. Verify AWS Account
+      # ============================================================
+      - name: Verify AWS Account
+        run: |
+          aws sts get-caller-identity
+
+
+      # ============================================================
+      # 13. Login to Amazon ECR
+      # ============================================================
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+
+      # ============================================================
+      # 14. Verify ECR Repository
+      # ============================================================
+      - name: Verify ECR Repository
+        run: |
+          aws ecr describe-repositories \
+            --repository-names $ECR_REPOSITORY \
+            --region ${{ secrets.AWS_REGION }}
+
+
+      # ============================================================
+      # 15. Tag Docker Image
+      # ============================================================
+      - name: Tag Docker Image
+        run: |
+          docker tag \
+            java-demo:${{ github.sha }} \
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+
+
+      # ============================================================
+      # 16. Push Docker Image to ECR
+      # ============================================================
+      - name: Push Docker Image
+        run: |
+          docker push \
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+
+
+      # ============================================================
+      # 17. Verify Image in ECR
+      # ============================================================
+      - name: Verify Image in ECR
+        run: |
+          aws ecr describe-images \
+            --repository-name $ECR_REPOSITORY \
+            --image-ids imageTag=${{ github.sha }} \
+            --region ${{ secrets.AWS_REGION }}
+
+
+      # ============================================================
+      # 18. Install kubectl
+      # ============================================================
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: latest
+
+
+      # ============================================================
+      # 19. Install Helm
+      # ============================================================
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: latest
+
+
+      # ============================================================
+      # 20. Configure EKS kubeconfig
+      # ============================================================
+      - name: Configure EKS
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ secrets.AWS_REGION }} \
+            --name ${{ secrets.EKS_CLUSTER_NAME }}
+
+
+      # ============================================================
+      # 21. Verify EKS Cluster
+      # ============================================================
+      - name: Verify EKS Cluster
+        run: |
+          kubectl get nodes
+
+
+      # ============================================================
+      # 22. Verify Kubernetes Namespace
+      # ============================================================
+      - name: Verify Kubernetes
+        run: |
+          kubectl get namespaces
+
+
+      # ============================================================
+      # 23. Helm Lint
+      # ============================================================
+      - name: Helm Lint
+        run: |
+          helm lint ./helm/java-demo
+
+
+      # ============================================================
+      # 24. Helm Template Validation
+      # ============================================================
+      - name: Helm Template
+        run: |
+          helm template java-demo ./helm/java-demo \
+            --set image.repository=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }} \
+            --set image.tag=${{ github.sha }}
+
+
+      # ============================================================
+      # 25. Deploy Application to EKS using Helm
+      # ============================================================
+      - name: Deploy to EKS using Helm
+        run: |
+          helm upgrade --install java-demo ./helm/java-demo \
+            --namespace java-demo \
+            --create-namespace \
+            --set image.repository=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }} \
+            --set image.tag=${{ github.sha }} \
+            --wait \
+            --timeout 5m
+
+
+      # ============================================================
+      # 26. Get Deployment
+      # ============================================================
+      - name: Get Kubernetes Deployment
+        run: |
+          kubectl get deployment \
+            -n java-demo
+
+
+      # ============================================================
+      # 27. Get Pods
+      # ============================================================
+      - name: Get Kubernetes Pods
+        run: |
+          kubectl get pods \
+            -n java-demo \
+            -o wide
+
+
+      # ============================================================
+      # 28. Get Service
+      # ============================================================
+      - name: Get Kubernetes Service
+        run: |
+          kubectl get service \
+            -n java-demo
+
+
+      # ============================================================
+      # 29. Check Rollout Status
+      # ============================================================
+      - name: Check Rollout Status
+        run: |
+          kubectl rollout status \
+            deployment/java-demo \
+            -n java-demo \
+            --timeout=5m
+
+
+      # ============================================================
+      # 30. Final Status
+      # ============================================================
+      - name: Pipeline Completed
+        run: |
+          echo "=========================================="
+          echo "Java Build Completed"
+          echo "Unit Tests Completed"
+          echo "SonarQube Scan Completed"
+          echo "Docker Build Completed"
+          echo "Trivy Scan Completed"
+          echo "Docker Image Pushed to Amazon ECR"
+          echo "EKS Cluster Connected"
+          echo "Helm Deployment Completed"
+          echo "Kubernetes Rollout Completed"
+          echo "=========================================="
+          echo "Image:"
+          echo "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
+          echo "=========================================="

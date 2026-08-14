@@ -11,7 +11,7 @@ public class HelloController {
 
     public String hello() {
 
-        return "Hello from GitHub Actions";
+        return "Hello from GitHub Actions INDHUMATHI";
 
     }
 

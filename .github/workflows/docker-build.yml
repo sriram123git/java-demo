@@ -52,7 +52,21 @@ jobs:
       - name: Run Unit Tests
         run: |
           mvn test
+      # ============================================================
+      # Setup Java 21 for SonarQube Scanner
+      # ============================================================
+      - name: Setup Java 21 for SonarQube
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
 
+      # ============================================================
+      # Verify Java Version
+      # ============================================================
+      - name: Verify Java 21
+        run: |
+          java -version
 
       # ============================================================
       # 5. Verify SonarQube Secrets
